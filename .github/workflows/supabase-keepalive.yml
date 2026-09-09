@@ -2,7 +2,7 @@
 # Paid (Pro) orgs never pause. This ping is the free-plan workaround.
 #
 # Required GitHub Actions secret:
-#   SUPABASE_DB_URL = Transaction/Session Postgres URI (same as DATABASE_URL)
+#   SUPABASE_DB_URL = Prisma DATABASE_URL (pgbouncer query param is stripped at runtime)
 name: supabase-keepalive
 on:
   schedule:
@@ -27,9 +27,20 @@ jobs:
           fi
           python <<'PY'
           import os
+          from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
           import psycopg2
 
-          conn = psycopg2.connect(os.environ["DATABASE_URL"], connect_timeout=20)
+          raw = os.environ["DATABASE_URL"]
+          parts = urlparse(raw)
+          query = [
+              (k, v)
+              for k, v in parse_qsl(parts.query, keep_blank_values=True)
+              if k.lower() not in {"pgbouncer"}
+          ]
+          url = urlunparse(parts._replace(query=urlencode(query)))
+
+          conn = psycopg2.connect(url, connect_timeout=20)
           cur = conn.cursor()
           cur.execute("select 1")
           cur.fetchone()
